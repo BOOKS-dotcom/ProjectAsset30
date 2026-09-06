@@ -1,5 +1,6 @@
 from openai import OpenAI
-from pathlib import Path
+from config import MODEL
+from utils.file_utils import save_markdown
 
 client = OpenAI()
 
@@ -8,7 +9,7 @@ def run():
     theme = input("調査テーマを入力してください：")
 
     response = client.responses.create(
-        model="gpt-5.5",
+        model=MODEL,
         input=f"""
 あなたは優秀なリサーチAIです。
 
@@ -31,14 +32,4 @@ def run():
     print(response.output_text)
     print("\n========================")
 
-    project_root = Path(__file__).resolve().parent.parent.parent
-    research_dir = project_root / "data" / "research"
-    research_dir.mkdir(parents=True, exist_ok=True)
-
-    file_path = research_dir / f"{theme}.md"
-
-    with open(file_path, "w", encoding="utf-8") as f:
-        f.write(f"# {theme}\n\n")
-        f.write(response.output_text)
-
-    print(f"\n調査結果を保存しました：{file_path}")
+    save_markdown("research", theme, response.output_text)
