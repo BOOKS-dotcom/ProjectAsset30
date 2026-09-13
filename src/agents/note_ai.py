@@ -1,0 +1,103 @@
+from openai import OpenAI
+from config import MODEL
+from utils.file_utils import (
+    save_markdown,
+    load_markdown,
+    list_markdown,
+)
+
+client = OpenAI()
+
+
+def run():
+
+    # ブログ記事一覧を取得
+    themes = list_markdown("blog")
+
+    if not themes:
+        print("ブログ記事がありません。")
+        print("先に Blog AI を実行してください。")
+        return
+
+    print("\n========================")
+    print("     ブログ記事一覧")
+    print("========================")
+
+    for i, theme in enumerate(themes, start=1):
+        print(f"{i}. {theme}")
+
+    print("0. 戻る")
+
+    choice = input("\n番号を入力してください：")
+
+    if choice == "0":
+        return
+
+    try:
+        theme = themes[int(choice) - 1]
+
+    except (ValueError, IndexError):
+        print("無効な番号です。")
+        return
+
+    # ブログ記事を読み込む
+    blog_content = load_markdown("blog", theme)
+
+    # Note記事を生成
+    response = client.responses.create(
+        model=MODEL,
+        input=f"""
+あなたはnote.com向けの記事を作成するプロのライターです。
+
+以下はBlog AIが作成したブログ記事です。
+
+この内容をもとに、
+note.comで読みやすく、最後まで読んでもらいやすい記事に
+再構成してください。
+
+-------------------------
+
+{blog_content}
+
+-------------------------
+
+以下のルールを守ってください。
+
+・ブログ記事をそのままコピーするのではなく、note向けに再構成してください。
+・初心者にも分かりやすい文章にしてください。
+・読者が「自分にも関係がある」と感じられる導入にしてください。
+・適度に改行してください。
+・見出しを使って読みやすくしてください。
+・専門用語には簡単な説明を入れてください。
+・読者にとって役立つ具体例を入れてください。
+・最後に内容を簡潔にまとめてください。
+・Markdown形式で出力してください。
+・見出しは #、##、### を使用してください。
+・見出しを ** で囲まないでください。
+・コードブロック（```）で囲まないでください。
+・そのまま .md ファイルとして保存できる形式で出力してください。
+
+以下の形式を基本としてください。
+
+# タイトル
+
+## 導入
+
+## 本文
+
+### ポイント1
+
+### ポイント2
+
+### ポイント3
+
+## まとめ
+"""
+    )
+
+    print("\n========================\n")
+    print(response.output_text)
+    print("\n========================")
+
+    # Note記事を保存
+    save_markdown("note", theme, response.output_text)

@@ -1,5 +1,7 @@
 from agents.research_ai import run as research_run
 from agents.blog_ai import run as blog_run
+from agents.note_ai import run as note_run
+
 
 while True:
     print("\n======================")
@@ -7,7 +9,7 @@ while True:
     print("======================")
     print("1. Research AI")
     print("2. Blog AI")
-    print("3. Note AI（準備中）")
+    print("3. Note AI")
     print("4. YouTube AI（準備中）")
     print("5. Translation AI（準備中）")
     print("0. 終了")
@@ -15,12 +17,15 @@ while True:
     choice = input("番号を入力してください：")
 
     if choice == "1":
-       research_run()
+        research_run()
 
     elif choice == "2":
-       blog_run()
+        blog_run()
 
-    elif choice in ["3", "4", "5"]:
+    elif choice == "3":
+        note_run()
+
+    elif choice in ["4", "5"]:
         print("現在開発中です")
 
     elif choice == "0":
