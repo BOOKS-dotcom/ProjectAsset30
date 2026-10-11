@@ -89,6 +89,51 @@ def _parse(content):
     return headings, body, problems
 
 
+
+def _mask_inline_code(text):
+    """同じ長さのバッククォートで閉じたコードを空白にし、改行を保つ。"""
+    runs = list(re.finditer(r"`+", text))
+    masked = list(text)
+    index = 0
+    while index < len(runs):
+        opening = runs[index]
+        backslashes = 0
+        before = opening.start() - 1
+        while before >= 0 and text[before] == "\\":
+            backslashes += 1
+            before -= 1
+        if backslashes % 2:
+            index += 1
+            continue
+        closing_index = next((candidate for candidate in range(index + 1, len(runs))
+                              if len(runs[candidate].group()) == len(opening.group())), None)
+        if closing_index is None:
+            index += 1  # 閉じていない記号はコードと見なさない。
+            continue
+        for position in range(opening.start(), runs[closing_index].end()):
+            if masked[position] != "\n":
+                masked[position] = " "
+        index = closing_index + 1
+    return "".join(masked)
+
+
+def _placeholder_texts(headings, body):
+    # コード除外は未完成表現だけに適用し、他のチェックの入力は変えない。
+    texts = [(line, _mask_inline_code(title)) for _, title, line in headings]
+    group = []
+    def flush():
+        masked = _mask_inline_code("\n".join(text for _, text in group)).split("\n")
+        texts.extend((line, text) for (line, _), text in zip(group, masked))
+    for number, text in body:
+        if group and number != group[-1][0] + 1:
+            flush()
+            group = []
+        group.append((number, text))
+    if group:
+        flush()
+    return sorted(texts)
+
+
 def check_article(content, folder, theme):
     if folder not in PROFILES:
         raise ValueError("Research・Blog・Noteから選択してください。")
@@ -124,8 +169,10 @@ def check_article(content, folder, theme):
                 repeated[normalized] += 1
     duplicate_count = sum(times > 1 for times in repeated.values())
     unfinished = []
-    for number, text in body + [(line, title) for _, title, line in headings]:
-        if re.search(r"ここに入力|ここに記入|本文を入力|タイトルを入力|\b(?:TODO|TBD|FIXME)\b", text, re.IGNORECASE):
+    for number, text in _placeholder_texts(headings, body):
+        if re.search(r"ここに入力|ここに記入|本文を入力|タイトルを入力|"
+                     r"(?<![A-Za-z0-9_])(?:TODO|TBD|FIXME)(?![A-Za-z0-9_])",
+                     text, re.IGNORECASE | re.ASCII):
             unfinished.append(f"{number}行目：未完成表現の候補があります。")
     def item(name, detail, issues, suggestion):
         return Check(name, detail, tuple(issues), (suggestion,) if issues else ())

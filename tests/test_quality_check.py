@@ -75,6 +75,70 @@ class RuleTests(unittest.TestCase):
                 self.assertFalse(self.item(report,'未完成表現').passed)
         self.assertTrue(self.item(self.check('# 題\nTODOLISTは製品名です。'),'未完成表現').passed)
 
+    def test_japanese_adjacent_todo_changes_overall_verdict(self):
+        report = self.check(article() + '\n\nTODOを修正する')
+        self.assertFalse(self.item(report,'未完成表現').passed)
+        self.assertFalse(report.passed)
+
+    def test_placeholders_next_to_japanese_and_punctuation(self):
+        for token in ('TODO','todo','ToDo','TBD','tbd','FIXME','fixme','FixMe'):
+            for text in (f'{token}を修正する',f'ここは{token}',f'ここは{token}です',
+                         f'（{token}）',f'{token}。',token):
+                with self.subTest(text=text):
+                    self.assertFalse(self.item(self.check('# 題\n'+text),'未完成表現').passed)
+
+    def test_placeholder_substrings_in_english_identifiers_are_not_flagged(self):
+        for text in ('TODOLIST','ToDoList','myTODO','TODO123','123TODO','_TODO',
+                     'TODO_item','TBDays','notTBD','FIXMEs','prefixFIXME',
+                     'こちらのTODOLISTです'):
+            with self.subTest(text=text):
+                self.assertTrue(self.item(self.check('# 題\n'+text),'未完成表現').passed)
+
+    def test_inline_todo_example_does_not_fail_overall_verdict(self):
+        report = self.check(article() + '\n\n`TODO` はコード例です。')
+        self.assertTrue(self.item(report,'未完成表現').passed)
+        self.assertTrue(report.passed)
+
+    def test_inline_code_excludes_all_placeholder_forms_and_multiple_spans(self):
+        for text in ('`TODO`、`TBD`、`FIXME`のコード例',
+                     '`ここに入力` は表示のコード例',
+                     '``TODOを修正する `TBD` FIXME`` のコード例',
+                     '```TODO``` はインラインのコード例'):
+            with self.subTest(text=text):
+                self.assertTrue(self.item(self.check('# 題\n説明：'+text),'未完成表現').passed)
+
+    def test_inline_and_regular_placeholders_on_same_line_are_independent(self):
+        for text in ('`TODO` の例。TODOを修正する',
+                     '本文はtbdです。`FIXME`は例です',
+                     '``TODO`` の例。ここに入力',
+                     '`TBD` `FIXME` の例。ここはFixMeです'):
+            with self.subTest(text=text):
+                self.assertFalse(self.item(self.check('# 題\n'+text),'未完成表現').passed)
+
+    def test_heading_inline_code_is_excluded_but_regular_placeholder_is_detected(self):
+        good = self.check('# `TODO`のコード例\n本文')
+        bad = self.check('# `TODO`の例とTBDを修正する\n本文')
+        self.assertTrue(self.item(good,'未完成表現').passed)
+        self.assertFalse(self.item(bad,'未完成表現').passed)
+
+    def test_escaped_or_unclosed_backticks_do_not_hide_regular_todo(self):
+        for text in ('`TODOを修正する',r'\`TODO\`を修正する',
+                     '``TODO`を修正する'):
+            with self.subTest(text=text):
+                self.assertFalse(self.item(self.check('# 題\n'+text),'未完成表現').passed)
+
+    def test_inline_code_can_span_soft_line_breaks_but_not_blank_paragraphs(self):
+        good = self.check('# 題\nコード例 `\nTODO\n` を説明します。')
+        bad = self.check('# 題\n未完了の `\n\nTODOを修正する\n\n`')
+        self.assertTrue(self.item(good,'未完成表現').passed)
+        self.assertFalse(self.item(bad,'未完成表現').passed)
+
+    def test_other_quality_results_are_unchanged_for_inline_placeholders(self):
+        report = self.check(article() + '\n\n`TODO` の例。')
+        for item in report.checks:
+            if item.name != '未完成表現':
+                self.assertTrue(item.passed,item.name)
+
     def test_fenced_code_is_not_prose_or_a_placeholder(self):
         report = self.check('# 題\n```python\n# TODO\nここに入力\n```\n説明')
         self.assertTrue(self.item(report,'未完成表現').passed)
