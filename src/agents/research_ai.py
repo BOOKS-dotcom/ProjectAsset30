@@ -1,17 +1,15 @@
 from openai import OpenAI
-from config import MODEL
+from utils.ai_utils import generate_text
 from utils.file_utils import save_markdown, validate_theme
 
 
-def run(theme=None):
+def run(theme=None, *, session=None):
     if theme is None:
         theme = input("調査テーマを入力してください：")
     theme = validate_theme(theme)
 
-    client = OpenAI()
-    response = client.responses.create(
-        model=MODEL,
-        input=f"""
+    content = generate_text(
+        OpenAI, f"""
 あなたは優秀なリサーチAIです。
 
 以下のテーマについて調査してください。
@@ -34,11 +32,13 @@ def run(theme=None):
 【重要ポイント】
 
 【今後注目すべき点】
-"""
+""", session=session
     )
+    if content is None:
+        return
 
     print("\n========================\n")
-    print(response.output_text)
+    print(content)
     print("\n========================")
 
-    save_markdown("research", theme, response.output_text)
+    save_markdown("research", theme, content)

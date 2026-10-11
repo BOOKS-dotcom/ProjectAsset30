@@ -5,7 +5,7 @@ import sys
 import tempfile
 import types
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
 # Offline API boundary: no credentials or network required.
@@ -14,6 +14,7 @@ from agents import research_ai, blog_ai, note_ai
 from utils import file_utils
 import pipeline
 import manager
+from utils import ai_utils
 
 
 class PipelineTests(unittest.TestCase):
@@ -28,13 +29,19 @@ class PipelineTests(unittest.TestCase):
         self.redirect = contextlib.redirect_stdout(self.output)
         self.redirect.__enter__()
         self.addCleanup(self.redirect.__exit__, None, None, None)
+        for target in (pipeline, ai_utils):
+            approval = patch.object(target, 'confirm_cost', return_value=True)
+            approval.start()
+            self.addCleanup(approval.stop)
         self.calls = []
         for module, content in ((research_ai, 'research result'),
                                 (blog_ai, 'blog result'), (note_ai, 'note result')):
-            client = Mock()
+            client = MagicMock()
+            client.__enter__.return_value = client
             def generate(content=content, **kwargs):
                 self.calls.append(kwargs['input'])
-                return types.SimpleNamespace(output_text=content)
+                return types.SimpleNamespace(output_text=content, status="completed",
+                    usage=types.SimpleNamespace(input_tokens=100, output_tokens=200))
             client.responses.create.side_effect = generate
             p = patch.object(module, 'OpenAI', return_value=client)
             p.start()
@@ -109,7 +116,7 @@ class PipelineTests(unittest.TestCase):
              patch.object(manager, 'pipeline_run', side_effect=RuntimeError('SECRET_SENTINEL')):
             manager.main()
         self.assertNotIn('SECRET_SENTINEL', self.output.getvalue())
-        self.assertIn('自動実行を停止', self.output.getvalue())
+        self.assertIn('実行を停止', self.output.getvalue())
 
     def test_manual_menu_routing(self):
         with patch('builtins.input', side_effect=['1', '2', '3', '4', '5', 'bad', '0']), \

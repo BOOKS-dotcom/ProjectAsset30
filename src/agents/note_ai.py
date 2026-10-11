@@ -1,5 +1,5 @@
 from openai import OpenAI
-from config import MODEL
+from utils.ai_utils import generate_text
 from utils.file_utils import (
     save_markdown,
     validate_theme,
@@ -8,7 +8,7 @@ from utils.file_utils import (
 )
 
 
-def run(theme=None):
+def run(theme=None, *, session=None):
 
     if theme is None:
         # ブログ記事一覧を取得
@@ -49,10 +49,8 @@ def run(theme=None):
     blog_content = load_markdown("blog", theme)
 
     # Note記事を生成
-    client = OpenAI()
-    response = client.responses.create(
-        model=MODEL,
-        input=f"""
+    content = generate_text(
+        OpenAI, f"""
 あなたはnote.com向けの記事を作成するプロのライターです。
 
 以下はBlog AIが作成したブログ記事です。
@@ -98,12 +96,14 @@ note.comで読みやすく、最後まで読んでもらいやすい記事に
 ### ポイント3
 
 ## まとめ
-"""
+""", session=session
     )
+    if content is None:
+        return
 
     print("\n========================\n")
-    print(response.output_text)
+    print(content)
     print("\n========================")
 
     # Note記事を保存
-    save_markdown("note", theme, response.output_text)
+    save_markdown("note", theme, content)
