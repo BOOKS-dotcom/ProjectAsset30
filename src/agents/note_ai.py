@@ -2,48 +2,54 @@ from openai import OpenAI
 from config import MODEL
 from utils.file_utils import (
     save_markdown,
+    validate_theme,
     load_markdown,
     list_markdown,
 )
 
-client = OpenAI()
 
+def run(theme=None):
 
-def run():
+    if theme is None:
+        # ブログ記事一覧を取得
+        themes = list_markdown("blog")
 
-    # ブログ記事一覧を取得
-    themes = list_markdown("blog")
+        if not themes:
+            print("ブログ記事がありません。")
+            print("先に Blog AI を実行してください。")
+            return
 
-    if not themes:
-        print("ブログ記事がありません。")
-        print("先に Blog AI を実行してください。")
-        return
+        print("\n========================")
+        print("     ブログ記事一覧")
+        print("========================")
 
-    print("\n========================")
-    print("     ブログ記事一覧")
-    print("========================")
+        for i, theme in enumerate(themes, start=1):
+            print(f"{i}. {theme}")
 
-    for i, theme in enumerate(themes, start=1):
-        print(f"{i}. {theme}")
+        print("0. 戻る")
 
-    print("0. 戻る")
+        choice = input("\n番号を入力してください：")
 
-    choice = input("\n番号を入力してください：")
+        if choice == "0":
+            return
 
-    if choice == "0":
-        return
+        try:
+            index = int(choice)
+            if not 1 <= index <= len(themes):
+                raise ValueError
+            theme = themes[index - 1]
 
-    try:
-        theme = themes[int(choice) - 1]
+        except (ValueError, IndexError):
+            print("無効な番号です。")
+            return
 
-    except (ValueError, IndexError):
-        print("無効な番号です。")
-        return
+    theme = validate_theme(theme)
 
     # ブログ記事を読み込む
     blog_content = load_markdown("blog", theme)
 
     # Note記事を生成
+    client = OpenAI()
     response = client.responses.create(
         model=MODEL,
         input=f"""
