@@ -49,10 +49,13 @@ class CostSession:
     unknown_usage: bool = False
 
     def record(self, usage):
-        if usage is None:
+        # 使用量の欠落・不正値を0円と扱わず、生成結果とは独立して扱う。
+        counts = (getattr(usage, "input_tokens", None),
+                  getattr(usage, "output_tokens", None))
+        if any(type(value) is not int or value < 0 for value in counts):
             self.unknown_usage = True
             return
-        self.usages.append((usage.input_tokens, usage.output_tokens))
+        self.usages.append(counts)
 
     def show_total(self):
         if not self.attempts:
@@ -78,21 +81,28 @@ def generate_text(client_factory, prompt, *, session=None):
         if not confirm_cost(input_size):
             return None
         session = CostSession()
-    session.attempts += 1
+    request_started = False
+    usage_processed = False
     try:
         with client_factory(max_retries=0, timeout=120.0) as client:
+            # クライアント初期化だけの失敗はAPI呼び出しに数えない。
+            session.attempts += 1
+            request_started = True
             response = client.responses.create(
                 model=config.MODEL, input=prompt,
                 max_output_tokens=config.MAX_OUTPUT_TOKENS,
                 reasoning={"effort": config.REASONING_EFFORT},
                 service_tier="default",
             )
-        session.record(response.usage)
-        if response.status != "completed" or not response.output_text.strip():
+            # 終了処理や記事の検証より先に、受信できた使用量を確保する。
+            session.record(getattr(response, "usage", None))
+            usage_processed = True
+        if (response.status != "completed" or
+                not isinstance(response.output_text, str) or not response.output_text.strip()):
             raise GenerationError("生成が未完了または空でした。保存せず停止しました。出力上限を確認してください。")
         return response.output_text
     except Exception:
-        if len(session.usages) < session.attempts:
+        if request_started and not usage_processed:
             session.unknown_usage = True
         raise
     finally:

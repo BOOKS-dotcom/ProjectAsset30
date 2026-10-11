@@ -137,6 +137,128 @@ class CostTests(unittest.TestCase):
         self.assertIn('$0.0195', self.output.getvalue())
 
 
+    def test_response_without_usage_attribute_still_returns_article(self):
+        del self.response.usage
+        with patch('builtins.input', return_value='y'):
+            self.assertEqual(ai_utils.generate_text(self.factory, 'prompt'), 'article')
+        self.assertIn('費用を計算できません', self.output.getvalue())
+        self.assertIn('使用量が取得できない', self.output.getvalue())
+        self.assertNotIn('$0.0000', self.output.getvalue())
+
+    def test_malformed_usage_is_unknown_and_does_not_break_generation(self):
+        for usage in (types.SimpleNamespace(),
+                      types.SimpleNamespace(input_tokens=100, output_tokens=None),
+                      types.SimpleNamespace(input_tokens=-1, output_tokens=200),
+                      types.SimpleNamespace(input_tokens='100', output_tokens=200),
+                      types.SimpleNamespace(input_tokens=True, output_tokens=200),
+                      types.SimpleNamespace(input_tokens=100, output_tokens=float('nan'))):
+            with self.subTest(usage=usage):
+                self.response.usage = usage
+                session = ai_utils.CostSession()
+                self.assertEqual(ai_utils.generate_text(self.factory, 'prompt', session=session), 'article')
+                session.show_total()
+                self.assertEqual(session.usages, [])
+                self.assertTrue(session.unknown_usage)
+        self.assertNotIn('$0.0000', self.output.getvalue())
+
+    def test_zero_usage_is_valid_and_not_unknown(self):
+        self.response.usage = types.SimpleNamespace(input_tokens=0, output_tokens=0)
+        session = ai_utils.CostSession()
+        ai_utils.generate_text(self.factory, 'prompt', session=session)
+        session.show_total()
+        self.assertEqual(session.usages, [(0, 0)])
+        self.assertFalse(session.unknown_usage)
+        self.assertIn('$0.0000', self.output.getvalue())
+        self.assertNotIn('使用量が取得できない', self.output.getvalue())
+
+    def test_client_close_failure_preserves_received_usage_and_original_error(self):
+        failure = RuntimeError('SECRET_SENTINEL')
+        self.client.__exit__.side_effect = failure
+        session = ai_utils.CostSession()
+        with self.assertRaises(RuntimeError) as raised:
+            ai_utils.generate_text(self.factory, 'prompt', session=session)
+        self.assertIs(raised.exception, failure)
+        session.show_total()
+        self.assertEqual(session.usages, [(100, 200)])
+        self.assertFalse(session.unknown_usage)
+        self.assertIn('$0.0065', self.output.getvalue())
+        self.assertNotIn('SECRET_SENTINEL', self.output.getvalue())
+
+    def test_client_construction_failure_is_not_an_api_attempt(self):
+        self.factory.side_effect = RuntimeError('SECRET_SENTINEL')
+        session = ai_utils.CostSession()
+        with self.assertRaises(RuntimeError):
+            ai_utils.generate_text(self.factory, 'prompt', session=session)
+        session.show_total()
+        self.assertEqual(session.attempts, 0)
+        self.assertFalse(session.unknown_usage)
+        self.assertEqual(self.output.getvalue(), '')
+
+    def test_client_enter_failure_is_not_an_api_attempt(self):
+        self.client.__enter__.side_effect = RuntimeError('SECRET_SENTINEL')
+        session = ai_utils.CostSession()
+        with self.assertRaises(RuntimeError):
+            ai_utils.generate_text(self.factory, 'prompt', session=session)
+        self.assertEqual(session.attempts, 0)
+        self.assertFalse(session.unknown_usage)
+        self.client.responses.create.assert_not_called()
+
+    def test_pipeline_missing_usage_then_known_usage_reports_partial_total(self):
+        responses = [types.SimpleNamespace(status='completed', output_text='article', usage=None),
+                     self.response, self.response]
+        self.client.responses.create.side_effect = responses
+        def stage(theme, *, session):
+            ai_utils.generate_text(self.factory, 'prompt', session=session)
+        with patch('builtins.input', return_value='y'), \
+             patch.object(pipeline, 'research_run', side_effect=stage), \
+             patch.object(pipeline, 'blog_run', side_effect=stage), \
+             patch.object(pipeline, 'note_run', side_effect=stage):
+            pipeline.run('theme')
+        self.assertEqual(self.client.responses.create.call_count, 3)
+        self.assertIn('$0.0130', self.output.getvalue())
+        self.assertIn('上記の金額には含まれません', self.output.getvalue())
+
+    def test_pipeline_request_failure_reports_previous_cost_and_unknown_call(self):
+        self.client.responses.create.side_effect = [self.response, RuntimeError('SECRET_SENTINEL')]
+        def stage(theme, *, session):
+            ai_utils.generate_text(self.factory, 'prompt', session=session)
+        with patch('builtins.input', return_value='y'), \
+             patch.object(pipeline, 'research_run', side_effect=stage), \
+             patch.object(pipeline, 'blog_run', side_effect=stage), \
+             patch.object(pipeline, 'note_run') as note, self.assertRaises(RuntimeError):
+            pipeline.run('theme')
+        note.assert_not_called()
+        self.assertEqual(self.client.responses.create.call_count, 2)
+        self.assertIn('$0.0065', self.output.getvalue())
+        self.assertIn('上記の金額には含まれません', self.output.getvalue())
+        self.assertNotIn('SECRET_SENTINEL', self.output.getvalue())
+
+    def test_invalid_output_after_received_usage_keeps_cost(self):
+        self.response.output_text = None
+        session = ai_utils.CostSession()
+        with self.assertRaises(ai_utils.GenerationError):
+            ai_utils.generate_text(self.factory, 'prompt', session=session)
+        session.show_total()
+        self.assertEqual(session.usages, [(100, 200)])
+        self.assertFalse(session.unknown_usage)
+        self.assertIn('$0.0065', self.output.getvalue())
+
+    def test_save_failure_after_api_response_keeps_cost_and_stops_next_agent(self):
+        from agents import blog_ai
+        with patch('builtins.input', return_value='y'), \
+             patch.object(research_ai, 'OpenAI', self.factory), \
+             patch.object(blog_ai, 'OpenAI', self.factory), \
+             patch.object(research_ai, 'save_markdown'), \
+             patch.object(blog_ai, 'load_markdown', return_value='source'), \
+             patch.object(blog_ai, 'save_markdown', side_effect=OSError), \
+             patch.object(pipeline, 'note_run') as note, self.assertRaises(OSError):
+            pipeline.run('theme')
+        note.assert_not_called()
+        self.assertEqual(self.client.responses.create.call_count, 2)
+        self.assertIn('$0.0130', self.output.getvalue())
+        self.assertNotIn('使用量が取得できない', self.output.getvalue())
+
+
 class HistoryTests(unittest.TestCase):
     def setUp(self):
         temp = tempfile.TemporaryDirectory()
