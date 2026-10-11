@@ -2,48 +2,54 @@ from openai import OpenAI
 from config import MODEL
 from utils.file_utils import (
     save_markdown,
+    validate_theme,
     load_markdown,
     list_markdown,
 )
 
-client = OpenAI()
 
+def run(theme=None):
 
-def run():
+    if theme is None:
+        # 調査済みテーマ一覧を取得
+        themes = list_markdown("research")
 
-    # 調査済みテーマ一覧を取得
-    themes = list_markdown("research")
+        if not themes:
+            print("調査済みテーマがありません。")
+            print("先に Research AI を実行してください。")
+            return
 
-    if not themes:
-        print("調査済みテーマがありません。")
-        print("先に Research AI を実行してください。")
-        return
+        print("\n========================")
+        print("     調査済みテーマ")
+        print("========================")
 
-    print("\n========================")
-    print("     調査済みテーマ")
-    print("========================")
+        for i, theme in enumerate(themes, start=1):
+            print(f"{i}. {theme}")
 
-    for i, theme in enumerate(themes, start=1):
-        print(f"{i}. {theme}")
+        print("0. 戻る")
 
-    print("0. 戻る")
+        choice = input("\n番号を入力してください：")
 
-    choice = input("\n番号を入力してください：")
+        if choice == "0":
+            return
 
-    if choice == "0":
-        return
+        try:
+            index = int(choice)
+            if not 1 <= index <= len(themes):
+                raise ValueError
+            theme = themes[index - 1]
 
-    try:
-        theme = themes[int(choice) - 1]
+        except (ValueError, IndexError):
+            print("無効な番号です。")
+            return
 
-    except (ValueError, IndexError):
-        print("無効な番号です。")
-        return
+    theme = validate_theme(theme)
 
     # 調査結果を読み込む
     research_content = load_markdown("research", theme)
 
     # ブログ生成
+    client = OpenAI()
     response = client.responses.create(
         model=MODEL,
         input=f"""

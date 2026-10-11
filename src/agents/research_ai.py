@@ -1,13 +1,14 @@
 from openai import OpenAI
 from config import MODEL
-from utils.file_utils import save_markdown
-
-client = OpenAI()
+from utils.file_utils import save_markdown, validate_theme
 
 
-def run():
-    theme = input("調査テーマを入力してください：")
+def run(theme=None):
+    if theme is None:
+        theme = input("調査テーマを入力してください：")
+    theme = validate_theme(theme)
 
+    client = OpenAI()
     response = client.responses.create(
         model=MODEL,
         input=f"""
