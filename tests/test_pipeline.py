@@ -47,6 +47,24 @@ class PipelineTests(unittest.TestCase):
             p.start()
             self.addCleanup(p.stop)
 
+    def test_pipeline_and_manual_agents_share_heading_normalization(self):
+        body = '# テーマ\n### 導入\n説明\n### 本文\n説明\n### まとめ\n結論'
+        with patch.object(research_ai, 'generate_text', return_value=body) as research, \
+             patch.object(blog_ai, 'generate_text', return_value=body) as blog, \
+             patch.object(note_ai, 'generate_text', return_value=body) as note:
+            pipeline.run('テーマ')
+            for folder in ('research', 'blog', 'note'):
+                saved = file_utils.load_markdown(folder, 'テーマ')
+                self.assertEqual(saved.count('# テーマ'), 1)
+                self.assertIn('## 導入', saved)
+            self.assertIn('## 導入', blog.call_args.args[1])
+            self.assertIn('## 導入', note.call_args.args[1])
+            for module in (research_ai, blog_ai, note_ai):
+                module.run('テーマ')
+            for mock in (research, blog, note):
+                self.assertIn('記事タイトルは保存側が付与', mock.call_args.args[1])
+                self.assertNotIn('\n# タイトル\n', mock.call_args.args[1])
+
     def test_pipeline_saves_and_hands_off_current_results(self):
         file_utils.save_markdown('research', '日本語テーマ', 'stale research')
         file_utils.save_markdown('blog', '日本語テーマ', 'stale blog')

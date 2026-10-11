@@ -4,6 +4,7 @@ import os
 import shutil
 import tempfile
 from uuid import uuid4
+from utils.markdown_utils import normalize_headings
 
 
 def validate_theme(theme: str) -> str:
@@ -22,6 +23,7 @@ def validate_theme(theme: str) -> str:
 
 def save_markdown(folder_name: str, file_name: str, content: str):
     file_name = validate_theme(file_name)
+    article, heading_warnings = normalize_headings(file_name, content)
     project_root = Path(__file__).resolve().parent.parent.parent
 
     save_dir = project_root / "data" / folder_name
@@ -35,8 +37,7 @@ def save_markdown(folder_name: str, file_name: str, content: str):
         with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8",
                                          dir=save_dir, suffix=".tmp", delete=False) as f:
             temp_path = Path(f.name)
-            f.write(f"# {file_name}\n\n")
-            f.write(content)
+            f.write(article)
         if file_path.exists():
             history_dir = save_dir / "history" / file_name
             history_dir.mkdir(parents=True, exist_ok=True)
@@ -60,6 +61,8 @@ def save_markdown(folder_name: str, file_name: str, content: str):
             temp_path.unlink()
 
     print(f"\n保存しました：{file_path}")
+    for warning in heading_warnings:
+        print(f"見出し要確認：{warning}")
 
 
 def load_markdown(folder_name: str, file_name: str) -> str:
