@@ -1,5 +1,5 @@
 from openai import OpenAI
-from utils.ai_utils import generate_text
+from utils.ai_utils import generate_text, article_length_instruction
 from utils.file_utils import (
     save_markdown,
     validate_theme,
@@ -75,6 +75,7 @@ note.comで読みやすく、最後まで読んでもらいやすい記事に
 ・専門用語には簡単な説明を入れてください。
 ・読者にとって役立つ具体例を入れてください。
 ・最後に内容を簡潔にまとめてください。
+・{article_length_instruction("note")}
 ・Markdown形式で出力してください。
 ・記事タイトルは保存側が付与するため、# タイトルは出力しないでください。
 ・本文の主要見出しは ##、小見出しは ### を使用してください。
@@ -95,7 +96,7 @@ note.comで読みやすく、最後まで読んでもらいやすい記事に
 ### ポイント3
 
 ## まとめ
-""", session=session
+""", session=session, stage="note"
     )
     if content is None:
         return
