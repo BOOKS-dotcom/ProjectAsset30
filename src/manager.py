@@ -2,6 +2,7 @@ from agents.research_ai import run as research_run
 from agents.blog_ai import run as blog_run
 from agents.note_ai import run as note_run
 from pipeline import run as pipeline_run
+from utils.ai_utils import GenerationError
 
 
 def main():
@@ -19,22 +20,18 @@ def main():
 
         choice = input("番号を入力してください：")
 
-        if choice == "1":
-            research_run()
-
-        elif choice == "2":
-            blog_run()
-
-        elif choice == "3":
-            note_run()
-
-        elif choice == "6":
-            theme = input("調査テーマを入力してください：")
+        if choice in {"1", "2", "3", "6"}:
             try:
-                pipeline_run(theme)
+                if choice == "6":
+                    theme = input("調査テーマを入力してください：")
+                    pipeline_run(theme)
+                else:
+                    {"1": research_run, "2": blog_run, "3": note_run}[choice]()
+            except GenerationError as error:
+                print(error)
             except Exception:
                 # API例外には機密情報が含まれる可能性があるため表示しない。
-                print("自動実行を停止しました。テーマ、API設定、接続、保存先を確認してください。保存済みの結果は残ります。")
+                print("実行を停止しました。テーマ、API設定、接続、保存先を確認してください。保存済みの結果は残ります。")
 
         elif choice in ["4", "5"]:
             print("現在開発中です")

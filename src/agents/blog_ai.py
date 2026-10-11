@@ -1,5 +1,5 @@
 from openai import OpenAI
-from config import MODEL
+from utils.ai_utils import generate_text
 from utils.file_utils import (
     save_markdown,
     validate_theme,
@@ -8,7 +8,7 @@ from utils.file_utils import (
 )
 
 
-def run(theme=None):
+def run(theme=None, *, session=None):
 
     if theme is None:
         # 調査済みテーマ一覧を取得
@@ -49,10 +49,8 @@ def run(theme=None):
     research_content = load_markdown("research", theme)
 
     # ブログ生成
-    client = OpenAI()
-    response = client.responses.create(
-        model=MODEL,
-        input=f"""
+    content = generate_text(
+        OpenAI, f"""
 あなたはプロのブログライターです。
 
 以下は調査担当AIが作成した調査レポートです。
@@ -88,11 +86,13 @@ def run(theme=None):
 ## 本文
 
 ## まとめ
-"""
+""", session=session
     )
+    if content is None:
+        return
 
     print("\n========================\n")
-    print(response.output_text)
+    print(content)
     print("\n========================")
 
-    save_markdown("blog", theme, response.output_text)
+    save_markdown("blog", theme, content)
