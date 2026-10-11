@@ -9,7 +9,7 @@ import config
 def run(theme: str):
     """費用確認後、同じテーマで順次生成・保存する。"""
     theme = validate_theme(theme)
-    if not confirm_cost(config.MAX_INPUT_BYTES * 3, calls=3):
+    if not confirm_cost(config.MAX_INPUT_BYTES * 3, stages=("research", "blog", "note")):
         return
     session = CostSession()
     try:

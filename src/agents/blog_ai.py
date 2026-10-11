@@ -1,5 +1,5 @@
 from openai import OpenAI
-from utils.ai_utils import generate_text
+from utils.ai_utils import generate_text, article_length_instruction
 from utils.file_utils import (
     save_markdown,
     validate_theme,
@@ -71,6 +71,7 @@ def run(theme=None, *, session=None):
 
 以下のルールを守ってください。
 
+・{article_length_instruction("blog")}
 ・Markdown形式で出力してください。
 ・記事タイトルは保存側が付与するため、# タイトルは出力しないでください。
 ・本文の主要見出しは ##、小見出しは ### を使用してください。
@@ -85,7 +86,7 @@ def run(theme=None, *, session=None):
 ## 本文
 
 ## まとめ
-""", session=session
+""", session=session, stage="blog"
     )
     if content is None:
         return
